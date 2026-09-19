@@ -18,7 +18,7 @@ utilisateur, la cible a été révisée :
 | Taxonomie | encodée dans les submodules et les noms | `ARCHITECTURE.md` + `catalog.yaml` (`parent:`) |
 | Noms | `agent-finance-contract-management`, `…-finance-contract-management-obligations` | `agent-contract-management`, `automation-obligations`, `workspace-obligations` |
 | URLs | SSH GitLab absolues | relatives (`../agent-common`), valables GitHub/GitLab/local |
-| Hébergement | GitLab, 3 groupes | une organisation GitHub (à choisir : `paul` est un compte utilisateur existant) ; préfixes + topics à la place des dossiers |
+| Hébergement | GitLab, 3 groupes | organisation GitHub `paul-agent` (`paul` étant un compte utilisateur existant) ; préfixes + topics à la place des dossiers |
 | `target_root` | `../generated` | `..` (à côté des repos `agent-*`, requis par les URLs relatives) |
 | Emplacement | `migration-root/` | `G:\DEV\paul\`, lui-même repo `paul` |
 
@@ -80,7 +80,7 @@ Organisation : https://github.com/paul-agent (propriétaire `openlabollioules`).
 1. Fait : `.\publish-github.ps1 -Org paul-agent` : crée les 9 repos (privés par défaut,
    workspaces toujours privés), ajoute les topics, `origin`, et pousse dans
    l'ordre `agent-*` → `automation-*` → `workspace-*` → `paul`.
-3. Droits : équipe large sur `agent-*`/`paul`, équipe de maintenance sur
+2. À faire — droits : équipe large sur `agent-*`/`paul`, équipe de maintenance sur
    `automation-*`, équipe « besoin d'en connaître » par workspace ; base
    permission de l'organisation à « No permission ».
 
