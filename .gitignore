@@ -1,0 +1,7 @@
+# Sibling PAUL repositories live inside this directory locally but are
+# separate Git repositories.
+/agent-*/
+/automation-*/
+/workspace-*/
+# verify.sh scratch directory
+/.verify-tmp/
