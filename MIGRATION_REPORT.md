@@ -1,7 +1,7 @@
 # MIGRATION_REPORT — pi-workspace → PAUL (spec v1.2, révision « modèle plat »)
 
 Date : 2026-09-19 · Source : `G:\DEV\pi-workspace` (`main`, HEAD `891f3cf`), **non modifié**.
-Racine : `G:\DEV\paul\` (repo système `paul` + 8 repos frères). Rien n'a été poussé.
+Racine : `G:\DEV\paul\` (repo système `paul` + 8 repos frères). Publié le 2026-09-19 dans l'organisation GitHub **`paul-agent`** (9 repos privés).
 
 ## 0. Révision par rapport à la spec v1.2
 
@@ -75,10 +75,9 @@ Adaptations de chemins uniquement dans les fichiers de définition d'obligations
 
 ## 4. Publication GitHub
 
-1. Créer l'organisation sur https://github.com/account/organizations/new
-   (`paul` est déjà pris par un compte utilisateur ; ex. `paul-labor`, ou
-   réutiliser `openlabollioules`).
-2. `.\publish-github.ps1 -Org <org>` : crée les 9 repos (privés par défaut,
+Organisation : https://github.com/paul-agent (propriétaire `openlabollioules`).
+
+1. Fait : `.\publish-github.ps1 -Org paul-agent` : crée les 9 repos (privés par défaut,
    workspaces toujours privés), ajoute les topics, `origin`, et pousse dans
    l'ordre `agent-*` → `automation-*` → `workspace-*` → `paul`.
 3. Droits : équipe large sur `agent-*`/`paul`, équipe de maintenance sur
@@ -142,10 +141,16 @@ collisions de noms de skills, extension « premier tour » pour `start-use-case`
 - sondes harness avec le code installé : Pi 0.84.2 et Hermes 0.21.2 chargent
   chaque skill exactement une fois, sans diagnostic Pi.
 
+## 7b. Après publication
+
+Clone propre `git clone --recurse-submodules https://github.com/paul-agent/workspace-obligations.git`
+(et `workspace-create-use-case`) : URLs relatives résolues vers `paul-agent`, 4 (resp. 2)
+submodules, tous les skills attendus présents.
+
 ## 8. Tests non effectués
 
 - Scénarios conversationnels `create-use-case` A–D et `start-use-case` SU1–SU5
   (session Pi/Hermes avec modèle).
 - `hermes skills trust` / approbation Pi interactive (modifient la config
   utilisateur).
-- Publication GitHub réelle (organisation à créer / choisir).
+- Droits d'équipes GitHub non configurés (à faire dans `paul-agent`).
