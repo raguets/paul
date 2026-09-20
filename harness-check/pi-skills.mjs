@@ -3,8 +3,8 @@
 // empty agent dir; the project is treated as trusted.
 //
 // In the `paul` monorepo a use case inherits the `.agents/skills` of the
-// business levels above it (exposed through <use-case>/.pi/settings.json), so
-// loaded skills legitimately live outside the given directory. Paths are
+// business levels above it: Pi walks up from cwd to the Git root on its own,
+// so loaded skills legitimately live outside the given directory. Paths are
 // therefore printed relative to the monorepo root; skills coming from outside
 // it (the user's global skills) are skipped.
 //

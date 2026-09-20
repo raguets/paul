@@ -20,7 +20,11 @@ Usage (run from the business folder that should receive the use case):
       --workspace --workspace-dirs contract,data,output
   python scaffold.py use-case --name obligations --workspace-from ../old/workspace-obligations
 
-  python scaffold.py pi-adapter --path finance/contract-management/obligations
+  python scaffold.py hermes-adapter --path finance/contract-management/obligations
+
+Pi needs no adapter: it walks up from cwd to the Git root collecting
+`<level>/.agents/skills` on its own. Hermes only scans the Git root, so
+`hermes-adapter` mirrors the intermediate levels with directory links.
 
 Run `python scaffold.py <command> --help` for all options.
 """
@@ -29,7 +33,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import json
+import os
 import re
 import subprocess
 import sys
@@ -39,8 +43,8 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES = SKILL_DIR / "templates"
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PLACEHOLDER_STYLES = ("stub", "dir", "empty")
-PI_README_EXCLUDE = "!**/README.md"
 SKILLS_REL = Path(".agents") / "skills"
+HERMES_SKILLS_REL = Path(".hermes") / "skills"
 # Names that would recreate the structures this architecture removed.
 FORBIDDEN_PREFIXES = ("automation-", "agent-", "workspace-")
 FORBIDDEN_NAMES = ("authoring", "_deps")
@@ -116,60 +120,90 @@ def monorepo_root(start: Path) -> Path:
     raise ScaffoldError(f"no Git repository above {start}: run this inside the `paul` monorepo")
 
 
-# --------------------------------------------------------------------------- pi adapter
+# --------------------------------------------------------------------------- hermes adapter
 
-def ancestor_skill_dirs(use_case: Path) -> list[Path]:
-    """`.agents/skills` directories of the business levels above *use_case*,
-    from the monorepo root down to its direct parent."""
-    use_case = use_case.resolve()
-    root = monorepo_root(use_case)
-    levels = [root, *[p for p in reversed(use_case.parents) if root in p.parents]]
-    return [lvl / SKILLS_REL for lvl in levels if (lvl / SKILLS_REL).is_dir()]
+def business_skill_dirs(use_case: Path | None, root: Path) -> list[Path]:
+    """`.agents/skills` directories that Hermes cannot reach on its own.
 
-
-def write_pi_adapter(use_case: Path) -> list[str]:
-    """Pi only auto-discovers `<cwd>/.agents/skills`; it does not walk up the
-    business hierarchy. List the ancestor skill directories explicitly in the
-    project settings (paths relative to `.pi/`). No skill is ever copied, and
-    the use case's own `.agents/skills` is left to auto-discovery.
-    Other keys of an existing `.pi/settings.json` are preserved."""
-    use_case = use_case.resolve()
-    pi_dir = use_case / ".pi"
-    dirs = [_relative_to_dir(d, pi_dir) for d in ancestor_skill_dirs(use_case)]
-    settings_file = pi_dir / "settings.json"
-    settings: dict = {}
-    if settings_file.exists():
-        settings = json.loads(settings_file.read_text(encoding="utf-8"))
-    kept = [s for s in settings.get("skills", [])
-            if not s.startswith("../") and s != PI_README_EXCLUDE]
-    settings["skills"] = kept + dirs + ([PI_README_EXCLUDE] if dirs else [])
-    if not settings["skills"]:
-        settings.pop("skills")
-    if settings:
-        pi_dir.mkdir(exist_ok=True)
-        settings_file.write_text(json.dumps(settings, indent=2) + "\n",
-                                 encoding="utf-8", newline="\n")
-    elif settings_file.exists():
-        settings_file.unlink()
-    return dirs
+    Hermes indexes only `<git root>/.agents/skills` and `<git root>/.hermes/skills`.
+    The root level is therefore excluded here: it is already native. With
+    *use_case*, return the levels of that branch only (business scoping, the
+    same set Pi sees natively). Without it, every business level of the repo.
+    """
+    if use_case is not None:
+        levels = [p for p in reversed(use_case.resolve().parents) if root in p.parents]
+        levels.append(use_case.resolve())
+    else:
+        levels = sorted({d.parent.parent for d in root.rglob("*/" + SKILLS_REL.as_posix())
+                         if d.is_dir() and "workspace-" not in d.as_posix()})
+    return [lvl / SKILLS_REL for lvl in levels
+            if lvl != root and (lvl / SKILLS_REL).is_dir()]
 
 
-def _common(a: Path, b: Path) -> Path:
-    parts = []
-    for x, y in zip(a.parts, b.parts):
-        if x != y:
-            break
-        parts.append(x)
-    return Path(*parts)
+def link_name(skills_dir: Path, root: Path) -> str:
+    """`finance/contract-management/.agents/skills` -> `finance-contract-management`.
+
+    The business level is two directories above (`<level>/.agents/skills`).
+    """
+    return "-".join(skills_dir.parent.parent.relative_to(root).parts)
 
 
-def _relative_to_dir(target: Path, base: Path) -> str:
-    """POSIX relative path from *base* to *target* (both absolute)."""
-    base, target = base.resolve(), target.resolve()
-    common = _common(base, target)
-    up = [".."] * (len(base.parts) - len(common.parts))
-    down = list(target.parts[len(common.parts):])
-    return "/".join(up + down) or "."
+def remove_link(path: Path) -> None:
+    """Remove a directory link without ever touching what it points at.
+
+    A junction or directory symlink must be unlinked, never walked: deleting it
+    recursively would delete the real `.agents/skills` behind it.
+    """
+    if not path.is_symlink() and not path.exists():
+        return
+    if not path.is_symlink() and path.is_dir() and any(path.iterdir()) and not _is_reparse(path):
+        raise ScaffoldError(f"{path} is a real directory, not a link; refusing to remove it")
+    try:
+        path.unlink()
+    except (OSError, PermissionError):
+        os.rmdir(path)
+
+
+def _is_reparse(path: Path) -> bool:
+    """True for a Windows junction, which `is_symlink()` may not report."""
+    try:
+        return bool(os.lstat(path).st_reparse_tag)  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return False
+
+
+def make_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        proc = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                              text=True, capture_output=True)
+        if proc.returncode != 0:
+            detail = (proc.stdout + proc.stderr).strip()
+            raise ScaffoldError(f"mklink /J {link} failed: {detail}")
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def write_hermes_adapter(root: Path, use_case: Path | None, clear: bool = False) -> list[str]:
+    """(Re)build `<root>/.hermes/skills`: one directory link per business level
+    Hermes cannot see. No SKILL.md is ever copied; the farm is gitignored."""
+    farm = root / HERMES_SKILLS_REL
+    if farm.exists():
+        for child in sorted(farm.iterdir()):
+            remove_link(child)
+    if clear:
+        if farm.exists() and not any(farm.iterdir()):
+            farm.rmdir()
+        return []
+    dirs = business_skill_dirs(use_case, root)
+    if not dirs:
+        return []
+    farm.mkdir(parents=True, exist_ok=True)
+    created = []
+    for d in dirs:
+        name = link_name(d, root)
+        make_link(farm / name, d)
+        created.append(f"{name} -> {d.relative_to(root).as_posix()}")
+    return created
 
 
 # --------------------------------------------------------------------------- commands
@@ -245,7 +279,6 @@ def cmd_use_case(args: argparse.Namespace) -> None:
         (use_case / "scripts").mkdir(exist_ok=True)
         created.append("scripts/")
     ws = make_workspace(use_case, name, args) if (args.workspace or args.workspace_from) else None
-    pi_dirs = write_pi_adapter(use_case)
 
     log("create-use-case scaffold summary")
     log(f"- use case: {use_case}")
@@ -255,19 +288,32 @@ def cmd_use_case(args: argparse.Namespace) -> None:
         log(f"- workspace repo: {ws}" + ("" if (ws / '.git').exists() else "  (no git: --no-git)"))
     else:
         log("- workspace repo: none (no persistent data needed)")
-    log(f"- inherited skill dirs exposed to Pi: {len(pi_dirs)}")
-    for d in pi_dirs:
-        log(f"    {d}")
+    inherited = business_skill_dirs(use_case, root)
+    log(f"- inherited business skill levels: {len(inherited)} "
+        "(Pi walks up to them natively; for Hermes run `scaffold.py hermes-adapter`)")
+    for d in inherited:
+        log(f"    {d.relative_to(root).as_posix()}")
 
 
-def cmd_pi_adapter(args: argparse.Namespace) -> None:
-    use_case = Path(args.path).resolve()
-    if not use_case.is_dir():
-        raise ScaffoldError(f"--path {use_case} does not exist")
-    dirs = write_pi_adapter(use_case)
-    log(f"{use_case / '.pi' / 'settings.json'}: {len(dirs)} inherited skill dir(s)")
-    for d in dirs:
-        log(f"  {d}")
+def cmd_hermes_adapter(args: argparse.Namespace) -> None:
+    if args.path:
+        use_case = Path(args.path).resolve()
+        if not use_case.is_dir():
+            raise ScaffoldError(f"--path {use_case} does not exist")
+        root = monorepo_root(use_case)
+    else:
+        use_case = None
+        root = monorepo_root(Path.cwd() / "x")
+    links = write_hermes_adapter(root, None if args.all else use_case, clear=args.clear)
+    farm = (root / HERMES_SKILLS_REL).as_posix()
+    if args.clear:
+        log(f"{farm}: cleared")
+        return
+    log(f"{farm}: {len(links)} business level(s) linked for Hermes")
+    for l in links:
+        log(f"  {l}")
+    if not links:
+        log("  (nothing to link: no business level above the root has skills)")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -295,10 +341,14 @@ def parser() -> argparse.ArgumentParser:
                     help="write files only: do not initialise the workspace repository")
     uc.set_defaults(func=cmd_use_case)
 
-    pa = sub.add_parser("pi-adapter",
-                        help="(re)write <use-case>/.pi/settings.json from the business hierarchy")
-    pa.add_argument("--path", required=True, help="the use case directory")
-    pa.set_defaults(func=cmd_pi_adapter)
+    ha = sub.add_parser("hermes-adapter",
+                        help="(re)build <root>/.hermes/skills with links to the business levels "
+                             "Hermes cannot reach (Pi needs no adapter)")
+    ha.add_argument("--path", help="use case directory: link only its branch (business scoping)")
+    ha.add_argument("--all", action="store_true",
+                    help="link every business level of the repo (no scoping)")
+    ha.add_argument("--clear", action="store_true", help="remove the links and stop")
+    ha.set_defaults(func=cmd_hermes_adapter)
     return p
 
 

@@ -4,5 +4,9 @@
 # Internal transient state for create-use-case
 /.create-use-case/
 
+# Generated harness adapter: directory links to the business skill levels
+# Hermes cannot reach on its own (scaffold.py hermes-adapter)
+/.hermes/
+
 # verify.sh scratch directory
 /.verify-tmp/

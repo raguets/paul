@@ -23,9 +23,10 @@
 ```text
 paul/
 ├── .git/
-├── .gitignore                            # **/*workspace*  +  /.create-use-case/
+├── .gitignore                            # **/*workspace* · /.create-use-case/ · /.hermes/
 ├── README.md
 ├── .create-use-case/                     # temporaire, gitignored
+├── .hermes/skills/                       # adaptateur Hermes généré, gitignored
 │
 ├── .agents/
 │   └── skills/                           # skills communs
@@ -48,7 +49,6 @@ paul/
             ├── .agents/skills/
             │   └── obligation-register-duckdb/SKILL.md
             ├── scripts/                  # si utile
-            ├── .pi/settings.json         # généré
             └── workspace-obligations/    # repo Git indépendant
                 └── .git/
 ```
@@ -135,5 +135,8 @@ d'environnement.
 
 | Harness | Découverte depuis le dossier du cas d'usage |
 |---|---|
-| Pi | `<cwd>/.agents/skills` automatiquement ; les niveaux métier au-dessus sont listés dans `<use-case>/.pi/settings.json` (généré par `scaffold.py`, aucune copie) |
-| Hermes | `<racine Git>/.agents/skills/**`, soit les skills **communs** de `paul` ; les niveaux intermédiaires et locaux ne sont pas vus — limite connue, traitée séparément, jamais contournée en dupliquant un `SKILL.md` |
+| Pi | natif : remonte de `cwd` jusqu'à la racine Git en collectant `<niveau>/.agents/skills`. Aucun adaptateur, aucun `.pi/settings.json` |
+| Hermes | `<racine Git>/.agents/skills/**` et `<racine Git>/.hermes/skills/**` : seuls les skills **communs** sont vus nativement. `scaffold.py hermes-adapter --path <use-case>` construit `PAUL_ROOT/.hermes/skills/` avec un lien de répertoire par niveau métier de la branche (gitignored, aucun `SKILL.md` copié) |
+
+Dans les deux cas un skill n'existe qu'une fois sur disque : Pi le trouve par
+remontée, Hermes par lien. Ne jamais dupliquer un `SKILL.md` pour un harness.

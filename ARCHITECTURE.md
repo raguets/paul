@@ -17,7 +17,7 @@ métier, cas d'usage. Il n'y a plus de chaîne de repos `agent-*` /
 ```text
 paul/
 ├── .git/
-├── .gitignore                            # **/*workspace*  +  /.create-use-case/
+├── .gitignore                            # **/*workspace* · /.create-use-case/ · /.hermes/
 ├── README.md                             # le seul README par défaut
 ├── ARCHITECTURE.md
 ├── verify.sh                             # tests structurels
@@ -25,6 +25,7 @@ paul/
 ├── docs/                                 # spec, rapport de migration, archives
 ├── tests/                                # scénarios fonctionnels
 ├── .create-use-case/                     # temporaire, gitignored
+├── .hermes/skills/                       # adaptateur Hermes généré, gitignored
 │
 ├── .agents/
 │   └── skills/                           # skills communs
@@ -44,7 +45,6 @@ paul/
 │           ├── AUTOMATION_SPEC.md
 │           ├── PROCESS_AUTOMATION.md
 │           ├── .agents/skills/obligation-register-duckdb/
-│           ├── .pi/settings.json
 │           └── workspace-obligations/    # repo Git indépendant
 │
 └── rh/
@@ -54,7 +54,6 @@ paul/
             ├── USE_CASE.md
             ├── AUTOMATION_SPEC.md
             ├── .agents/skills/analyse-candidature/
-            ├── .pi/settings.json
             └── workspace-candidature/    # repo Git indépendant
 ```
 
@@ -86,7 +85,6 @@ qui sert.
 | spécifications (`AUTOMATION_SPEC.md`, `USE_CASE.md`, `PROCESS_AUTOMATION.md`, `AGENTS.md`) | si utiles |
 | `.agents/skills/` | seulement si un skill spécifique est nécessaire |
 | `scripts/` | seulement si des scripts propres sont nécessaires |
-| `.pi/settings.json` | généré (§6) |
 | `workspace-<slug>/` | seulement si des données persistent |
 
 Cas d'usage actuels :
@@ -152,15 +150,37 @@ pi        # ou hermes, opencode…
 Le `.git` du workspace est *en dessous* de ce répertoire : il ne perturbe pas
 la recherche ascendante de la racine de projet.
 
-| Harness | Découverte des skills | État |
+| Harness | Découverte native | Adaptateur |
 |---|---|---|
-| Pi | `<cwd>/.agents/skills` automatiquement ; les niveaux métier supérieurs sont listés dans `<use-case>/.pi/settings.json`, généré par `scaffold.py pi-adapter` (aucune copie) | ✅ toute la chaîne est vue, une seule fois (vérifié par `verify.sh`) |
-| Hermes | `<racine Git>/.agents/skills/**`, soit la racine `paul` : seuls les skills **communs** sont vus | ⚠️ les niveaux métier intermédiaires et les skills locaux ne sont pas vus |
+| Pi | remonte de `cwd` jusqu'à la racine Git en collectant `<niveau>/.agents/skills` (`collectAncestorAgentsSkillDirs`) | **aucun** — l'héritage structurel est natif, y compris le cloisonnement entre branches |
+| Hermes | `<racine Git>/.agents/skills/**` et `<racine Git>/.hermes/skills/**` uniquement : seuls les skills **communs** | `scaffold.py hermes-adapter --path <use-case>` |
 
-La limite Hermes est une limite du harness, pas de l'architecture. Elle est
-traitée séparément : ne jamais dupliquer un `SKILL.md` ni modifier la
-hiérarchie métier pour la contourner. Une configuration harness-specific doit
-rester minimale et ne contenir aucune logique métier.
+L'adaptateur Hermes construit `paul/.hermes/skills/` avec un **lien de
+répertoire** (jonction Windows, symlink POSIX) par niveau métier de la branche
+visée :
+
+```bash
+python .agents/skills/create-use-case/scripts/scaffold.py \
+       hermes-adapter --path finance/contract-management/obligations
+hermes skills trust      # au premier usage, à la racine de paul
+```
+
+```text
+paul/.hermes/skills/
+├── finance-contract-management             -> finance/contract-management/.agents/skills
+└── finance-contract-management-obligations -> finance/contract-management/obligations/.agents/skills
+```
+
+Aucun `SKILL.md` n'est copié : il n'existe qu'un seul fichier sur disque, et
+`git status` ne voit rien (le dossier est gitignored). `--all` lie toutes les
+branches d'un coup, au prix du cloisonnement métier ; `--clear` le vide. Le
+choix par défaut est la branche, pour reproduire exactement ce que Pi voit.
+
+Une alternative existe sans lien : `skills.external_dirs` dans le `config.yaml`
+de Hermes accepte des répertoires de skills supplémentaires. Elle est
+volontairement écartée ici : la configuration est globale au profil, donc les
+skills métier de `paul` seraient exposés dans **toutes** les sessions Hermes,
+y compris hors du dépôt.
 
 ## 7. `create-use-case`
 

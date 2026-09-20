@@ -34,7 +34,7 @@ Documents de référence (lire au besoin, chemins relatifs à ce skill) :
 | `references/READINESS_MODEL.md` | R1-R10, statuts, Definition of Ready, format de `READINESS.md` |
 | `references/PROJECT_LAYOUTS.md` | arborescence d'un cas d'usage, placement des skills, workspaces, harnesses |
 | `references/SOURCE_LIFECYCLE.md` | gestion des sources qui évoluent entre deux runs |
-| `scripts/scaffold.py` | matérialise les décisions (dossier, TASK.md, skills, workspace, adaptateur Pi) |
+| `scripts/scaffold.py` | matérialise les décisions (dossier, TASK.md, skills, workspace, adaptateur Hermes) |
 | `templates/` | `TASK.md`, `USE_CASE.md`, état `state/` |
 
 ---
@@ -306,7 +306,6 @@ Il n'existe **plus** deux architectures distinctes « tâche simple » et
 ├── .agents/skills/              # seulement si un skill spécifique est nécessaire
 │   └── <skill>/SKILL.md
 ├── scripts/                     # seulement si des scripts propres sont nécessaires
-├── .pi/settings.json            # généré : adaptateur Pi (§11)
 └── workspace-<slug>/            # seulement si des données persistent (repo Git indépendant)
 ```
 
@@ -420,7 +419,9 @@ S'il existe déjà, le cloner directement sous ce nom
 4. Lire le résumé du script ; noter dans `GENERATED.md` ce qui a été créé.
 5. `NEXT_ACTION: WRITE_TASK_AND_DOCS`.
 
-Le script écrit aussi `<use-case>/.pi/settings.json` (adaptateur Pi, §11).
+Le script n'écrit aucune configuration de harness : Pi découvre la hiérarchie
+seul (§11). Si l'utilisateur travaille sous Hermes, lancer ensuite
+`scaffold.py hermes-adapter --path <use-case>`.
 
 ---
 
@@ -567,19 +568,25 @@ Workspace: workspace-<slug> | none
 
 - Source canonique des skills : `.agents/skills/<skill>/SKILL.md`. Jamais de
   copie dans `.pi/skills`, `.hermes/skills` ou un autre niveau métier.
-- **Pi** découvre `<cwd>/.agents/skills` mais ne remonte pas la hiérarchie
-  métier. `scaffold.py` écrit donc `<use-case>/.pi/settings.json` listant les
-  `.agents/skills` des niveaux **au-dessus** du cas d'usage (aucune copie).
-  Après avoir déplacé un cas d'usage ou ajouté un niveau métier :
+- **Pi** implémente nativement l'héritage structurel : il remonte de `cwd`
+  jusqu'à la racine Git en collectant `<niveau>/.agents/skills` à chaque
+  étage. Depuis un cas d'usage, il voit donc ses skills locaux, ceux de ses
+  parents métier et les communs — et rien des autres branches. **Aucun
+  adaptateur n'est nécessaire** : ne pas écrire de `.pi/settings.json`.
+- **Hermes** n'indexe que `<racine Git>/.agents/skills` et
+  `<racine Git>/.hermes/skills` : depuis un cas d'usage, la racine Git est
+  `PAUL_ROOT`, donc seuls les skills **communs** sont vus. Pour lui exposer les
+  niveaux métier sans rien dupliquer :
+
   ```bash
-  python <SKILL_DIR>/scripts/scaffold.py pi-adapter --path <use-case>
+  python <SKILL_DIR>/scripts/scaffold.py hermes-adapter --path <use-case>
   ```
-- **Hermes** découvre `<racine Git>/.agents/skills/**` : depuis un cas d'usage,
-  la racine Git est `PAUL_ROOT`, donc les skills **communs** sont vus, mais pas
-  les niveaux métier intermédiaires ni ceux du cas d'usage. C'est une limite
-  connue du harness, traitée séparément : ne jamais dupliquer un `SKILL.md`
-  pour la contourner, et ne pas modifier l'architecture métier pour cette
-  raison.
+
+  Cela construit `PAUL_ROOT/.hermes/skills/` avec un **lien de répertoire**
+  (jonction Windows / symlink POSIX) par niveau métier de la branche visée —
+  aucun `SKILL.md` n'est copié, il n'existe qu'un seul fichier sur disque. Le
+  dossier est gitignored et se régénère ; `--all` lie toutes les branches (sans
+  cloisonnement), `--clear` le vide.
 
 Toute configuration harness-specific doit rester minimale, ne contenir aucune
 logique métier et ne recopier aucun `SKILL.md`.
@@ -603,7 +610,7 @@ logique métier et ne recopier aucun `SKILL.md`.
 11. depuis `PAUL_ROOT`, `git status --short` n'affiche aucun fichier du
     workspace ; depuis le workspace, `git status` et `git remote -v`
     fonctionnent comme un repo indépendant ;
-12. `<use-case>/.pi/settings.json` liste les niveaux métier hérités ;
+12. aucun `.pi/settings.json` n'a été créé (Pi n'en a pas besoin) ;
 13. rien d'inutile (peut-on supprimer un skill, un dossier, un fichier sans
     perte ?) ;
 14. ne pas lancer la mission métier.

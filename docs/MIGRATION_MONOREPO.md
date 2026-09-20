@@ -52,7 +52,8 @@ monorepo unique `paul`, la hiérarchie métier étant portée par les dossiers.
   `process-automation-bootstrap` n'est pas réintroduit.
 - `scaffold.py` : une seule commande `use-case` (plus de `simple-task` /
   `automation`), plus de submodule, plus de catalogue ; refuse les noms
-  préfixés ; commande `pi-adapter` réécrite pour la hiérarchie de dossiers.
+  préfixés. La commande `pi-adapter` a été **supprimée** (Pi n'en a pas
+  besoin) et remplacée par `hermes-adapter` (§7).
 - `start-use-case` : le point d'entrée implicite est le `TASK.md` du
   **dossier courant** du cas d'usage, jamais celui d'un `workspace-*`,
   de `.agents/`, `evaluator/` ou `.git/`.
@@ -60,9 +61,12 @@ monorepo unique `paul`, la hiérarchie métier étant portée par les dossiers.
   `USE_CASE.md` et les skills locaux : chemins de données préfixés par
   `workspace-<slug>/`.
 - `verify.sh` : réécrit pour les tests structurels du monorepo (§30-33 de la
-  spec) ; 108 assertions.
+  spec) ; 127 assertions, dont les sondes Pi et Hermes.
 - `harness-check/pi-skills.mjs` : affiche les skills hérités des niveaux
-  supérieurs (chemins relatifs à la racine du monorepo).
+  supérieurs (chemins relatifs à la racine du monorepo). La version initiale
+  filtrait tout chemin commençant par `..`, donc masquait exactement les skills
+  hérités — c'est ce qui avait fait conclure à tort que Pi ne remontait pas la
+  hiérarchie.
 - `publish-github.ps1` : publie `paul` puis les repos `workspace-*` imbriqués
   découverts sur disque (toujours privés).
 - `analyse-candidature/SKILL.md` : frontmatter `name` / `description` ajouté —
@@ -96,20 +100,39 @@ et `TASK.md`, et réécrit leur `README.md`. Rien n'a été poussé.
 Les deux PDF déposés dans `workspace-candidature/input/` (CV et offre)
 restent **non suivis**, comme avant la migration.
 
+## 7. Harnesses
+
+Mesuré sur les harnesses installés, depuis
+`finance/contract-management/obligations` :
+
+| Harness | Découverte native | Adaptateur |
+|---|---|---|
+| Pi | remonte de `cwd` jusqu'à la racine Git en collectant `<niveau>/.agents/skills` (`collectAncestorAgentsSkillDirs` dans `core/package-manager.js`) | **aucun** |
+| Hermes | `<racine Git>/.agents/skills/**` + `<racine Git>/.hermes/skills/**` (`PROJECT_SKILLS_SUBDIRS` dans `agent/skill_utils.py`) | `scaffold.py hermes-adapter` |
+
+Pi couvre donc nativement l'héritage structurel **et** le cloisonnement entre
+branches : depuis `candidature`, il ne voit ni `contract-obligation-extraction`
+ni `obligation-register-duckdb`. Aucun `.pi/settings.json` n'est écrit.
+
+Pour Hermes, `scaffold.py hermes-adapter --path <use-case>` construit
+`paul/.hermes/skills/` avec un lien de répertoire (jonction Windows, symlink
+POSIX) par niveau métier de la branche. Aucun `SKILL.md` n'est copié, le
+dossier est gitignored, et la suppression des liens ne touche jamais leur
+cible. `--all` lie toutes les branches, `--clear` vide le dossier.
+
+`skills.external_dirs` du `config.yaml` de Hermes offrirait le même résultat
+sans lien, mais la configuration est globale au profil : les skills métier de
+`paul` seraient exposés dans toutes les sessions Hermes, y compris hors du
+dépôt. Écarté pour cette raison.
+
 ## 6. Vérification
 
 ```bash
-bash verify.sh        # 108 assertions : structure, workspaces, skills, scaffold, sondes Pi/Hermes
+bash verify.sh        # 127 assertions : structure, workspaces, skills, scaffold, sondes Pi/Hermes
 ```
 
-Découverte des skills depuis `finance/contract-management/obligations` :
-
-| Harness | Résultat |
-|---|---|
-| Pi | les 5 skills communs + `contract-obligation-extraction` + `obligation-register-duckdb`, chacun une seule fois, aucun diagnostic |
-| Hermes | les 5 skills communs uniquement |
-
-Hermes ne parcourt que `<racine Git>/.agents/skills` : les niveaux métier
-intermédiaires et les skills locaux ne lui sont pas visibles. Limite du
-harness, consignée dans `ARCHITECTURE.md` §6 et traitée séparément —
-aucun `SKILL.md` n'est dupliqué pour la contourner.
+Depuis `finance/contract-management/obligations`, les deux harnesses chargent
+les 7 skills de la chaîne (5 communs + `contract-obligation-extraction` +
+`obligation-register-duckdb`), chacun exactement une fois : Pi nativement,
+Hermes après `scaffold.py hermes-adapter --path`. Aucun `SKILL.md` n'existe en
+double sur disque.

@@ -1,7 +1,0 @@
-{
-  "skills": [
-    "../../../../.agents/skills",
-    "../../.agents/skills",
-    "!**/README.md"
-  ]
-}

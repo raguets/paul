@@ -33,6 +33,18 @@ Puis `go` comme première instruction, ou `exécute TASK.md`. Le point d'entrée
 est le `TASK.md` du dossier ; les données vivent dans le repo imbriqué
 `workspace-<slug>/`.
 
+Pi hérite tout seul des skills des niveaux métier supérieurs. Hermes ne scanne
+que la racine du dépôt : lui exposer les niveaux métier demande une fois
+
+```bash
+python .agents/skills/create-use-case/scripts/scaffold.py \
+       hermes-adapter --path finance/contract-management/obligations
+hermes skills trust
+```
+
+(liens de répertoire gitignorés, aucune copie de skill — voir
+[ARCHITECTURE.md](ARCHITECTURE.md) §6).
+
 ## Créer un cas d'usage
 
 Depuis le dossier métier qui doit l'accueillir :

@@ -95,6 +95,9 @@ check "no transient create-use-case state committed" test -z "$(tracked "$ROOT" 
 section "Workspaces — nested independent Git repositories"
 check ".gitignore ignores **/*workspace*" grep -qx '\*\*/\*workspace\*' "$ROOT/.gitignore"
 check ".gitignore ignores /.create-use-case/" grep -qx '/\.create-use-case/' "$ROOT/.gitignore"
+check ".gitignore ignores the generated /.hermes/ adapter" grep -qx '/\.hermes/' "$ROOT/.gitignore"
+check "no .pi/settings.json anywhere (Pi needs no adapter)" \
+  test -z "$(find "$ROOT" -name settings.json -path '*/.pi/*' -not -path '*/.verify-tmp/*')"
 check "paul tracks no workspace file" test -z "$(tracked "$ROOT" | grep -i workspace)"
 check "git status --short hides the workspaces" test -z "$(git -C "$ROOT" status --short | grep -i workspace)"
 for ws in "${WORKSPACES[@]}"; do
@@ -147,8 +150,7 @@ check "  no .agents/skills when no specific skill is needed (CU4)" test ! -e "$U
 check "  no workspace when no persistent data is needed (CU5)" test -z "$(find "$UC" -maxdepth 1 -name 'workspace-*')"
 check "  no .create-use-case/ inside the use case (CU3)" test ! -e "$UC/.create-use-case"
 check "  no README.md" test ! -f "$UC/README.md"
-check "  Pi adapter lists the 2 inherited levels" \
-  test "$(grep -c '\.agents/skills"' "$UC/.pi/settings.json")" = 2
+check "  no .pi/settings.json written (Pi walks up on its own)" test ! -e "$UC/.pi"
 check "  no _deps, no submodule" test ! -e "$UC/.agents/skills/_deps" -a ! -e "$UC/.gitmodules"
 
 check "use case with a local skill, scripts and a workspace" \
@@ -197,22 +199,44 @@ else echo "  skip Pi not found (set PI_INDEX)"; fi
 
 HERMES_DIR="${HERMES_DIR:-${LOCALAPPDATA:-}/hermes/hermes-agent}"
 HERMES_PY="${HERMES_PY:-$HERMES_DIR/venv/Scripts/python.exe}"
+hermes_skills() { "$HERMES_PY" "$ROOT/harness-check/hermes_skills.py" "$HERMES_DIR" "$1" 2>/dev/null; }
 if [ -f "$HERMES_DIR/agent/skill_utils.py" ] && [ -x "$HERMES_PY" ]; then
-  out=$("$HERMES_PY" "$ROOT/harness-check/hermes_skills.py" "$HERMES_DIR" \
-        "$ROOT/finance/contract-management/obligations" 2>/dev/null)
+  OBL="$ROOT/finance/contract-management/obligations"
+  # Hermes scans only <git root>/.agents/skills and <git root>/.hermes/skills.
+  "$PY" "$SCAFFOLD" hermes-adapter --clear >/dev/null 2>&1
+  out=$(hermes_skills "$OBL")
   for s in "${COMMON_SKILLS[@]}"; do
-    if [ "$(printf '%s\n' "$out" | grep -c "^$s	")" = 1 ]
-    then ok "Hermes indexes the common skill $s once"
-    else ko "Hermes indexes the common skill $s once"; fi
+    if [ "$(printf '%s
+' "$out" | grep -c "^$s	")" = 1 ]
+    then ok "Hermes indexes the common skill $s once (no adapter)"
+    else ko "Hermes indexes the common skill $s once (no adapter)"; fi
   done
-  # Known harness limitation (ARCHITECTURE.md §6): Hermes scans only
-  # <git root>/.agents/skills, so intermediate levels are not seen. Recorded,
-  # not worked around by duplicating a SKILL.md.
-  if printf '%s\n' "$out" | grep -q 'obligation-register-duckdb'; then
-    ok "Hermes also sees the use case skill"
-  else
-    echo "  note Hermes does not see the intermediate/local skills (known, see ARCHITECTURE.md §6)"
-  fi
+  check "without the adapter, Hermes misses the business levels"     test -z "$(printf '%s
+' "$out" | grep -E 'contract-obligation-extraction|obligation-register-duckdb')"
+
+  check "hermes-adapter builds the branch farm" "$PY" "$SCAFFOLD" hermes-adapter --path "$OBL"
+  out=$(hermes_skills "$OBL")
+  for s in "${COMMON_SKILLS[@]}" contract-obligation-extraction obligation-register-duckdb; do
+    if [ "$(printf '%s
+' "$out" | grep -c "^$s	")" = 1 ]
+    then ok "Hermes indexes $s exactly once (with adapter)"
+    else ko "Hermes indexes $s exactly once (with adapter)"; fi
+  done
+  check "  adapter keeps the business scoping"     test -z "$(printf '%s
+' "$out" | grep analyse-candidature)"
+  check "  no SKILL.md copied: each skill exists once on disk"     test "$(find "$ROOT/finance" "$ROOT/rh" -path '*/.agents/skills/*' -name SKILL.md | wc -l)" = 3
+  check "  the farm is gitignored" test -z "$(git -C "$ROOT" status --short | grep hermes)"
+
+  check "hermes-adapter --all links every branch" "$PY" "$SCAFFOLD" hermes-adapter --all
+  out=$(hermes_skills "$ROOT/rh/recrutement/candidature")
+  check "  analyse-candidature reachable" test "$(printf '%s
+' "$out" | grep -c '^analyse-candidature	')" = 1
+
+  check "hermes-adapter --clear removes the farm" "$PY" "$SCAFFOLD" hermes-adapter --clear
+  check "  targets survived the link removal"     test -f "$ROOT/finance/contract-management/.agents/skills/contract-obligation-extraction/SKILL.md"       -a -f "$OBL/.agents/skills/obligation-register-duckdb/SKILL.md"       -a -f "$ROOT/rh/recrutement/candidature/.agents/skills/analyse-candidature/SKILL.md"
+  mkdir -p "$ROOT/.hermes/skills/not-a-link" && : > "$ROOT/.hermes/skills/not-a-link/SKILL.md"
+  check "  refuses to remove a real directory"     bash -c "! '$PY' '$SCAFFOLD' hermes-adapter --all"
+  rm -rf "$ROOT/.hermes"
 else echo "  skip Hermes not found (set HERMES_DIR / HERMES_PY)"; fi
 
 # ---------------------------------------------------------------------------
