@@ -1,32 +1,75 @@
 # PAUL — Personal Assistant for Universal Labor
 
-System repository of PAUL: architecture, migration reports and tooling. The
-agent assets, automations and workspaces live in sibling repositories of the
-same GitHub organisation (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+Monorepo de PAUL : toute la logique agentique — skills communs, skills métier
+et cas d'usage — dans un seul repo Git. La hiérarchie métier est exprimée
+directement par les dossiers.
 
-| File | Purpose |
-|---|---|
-| `ARCHITECTURE.md` | taxonomy, use cases, repositories, flat dependency model — source of truth |
-| `MIGRATION_REPORT.md` | split of the former `pi-workspace` monorepo |
-| `MIGRATION_INVENTORY.md` | audit of the monorepo before the split |
-| `verify.sh` | structural checks of all repositories (`bash verify.sh`) |
-| `harness-check/` | Pi / Hermes skill-discovery probes used by `verify.sh` |
-| `publish-github.ps1` | creates and pushes the repositories in dependency order |
-
-## Local setup
-
-All PAUL repositories are siblings of this one:
-
-```powershell
-git config --global core.longpaths true          # Windows
-git clone https://github.com/<org>/paul.git
-cd paul
-foreach ($r in "agent-common","agent-authoring","agent-finance","agent-contract-management",
-               "automation-create-use-case","automation-obligations") {
-  git clone "https://github.com/<org>/$r.git"
-}
-git clone --recurse-submodules https://github.com/<org>/workspace-create-use-case.git
-git clone --recurse-submodules https://github.com/<org>/workspace-obligations.git   # if authorised
+```text
+paul/
+├── .agents/skills/                       # skills communs
+├── finance/contract-management/
+│   ├── .agents/skills/                   # skills du sous-domaine
+│   └── obligations/                      # cas d'usage
+│       ├── TASK.md
+│       └── workspace-obligations/        # repo Git indépendant (données)
+└── rh/recrutement/
+    └── candidature/                      # cas d'usage
+        ├── TASK.md
+        └── workspace-candidature/        # repo Git indépendant (données)
 ```
 
-The sibling repositories are ignored by this repository (`.gitignore`).
+Voir [ARCHITECTURE.md](ARCHITECTURE.md) pour le détail.
+
+## Lancer un cas d'usage
+
+Depuis le dossier du cas d'usage :
+
+```bash
+cd finance/contract-management/obligations
+pi                     # ou hermes, opencode…
+```
+
+Puis `go` comme première instruction, ou `exécute TASK.md`. Le point d'entrée
+est le `TASK.md` du dossier ; les données vivent dans le repo imbriqué
+`workspace-<slug>/`.
+
+## Créer un cas d'usage
+
+Depuis le dossier métier qui doit l'accueillir :
+
+```bash
+cd finance/contract-management
+pi
+# « crée un use case contract-review »   ->   ./contract-review/
+```
+
+Le skill commun `create-use-case` mène la discovery (avec `grill-me`), choisit
+l'architecture minimale et génère le cas d'usage. « génère maintenant » arrête
+les questions ; « crée juste l'arborescence » se limite au scaffold.
+
+## Workspaces
+
+Les données métier d'un cas d'usage vivent dans un repo Git **indépendant**
+`workspace-<slug>/`, imbriqué sous le cas d'usage et ignoré par ce repo
+(`**/*workspace*`). Ses droits peuvent être plus restrictifs.
+
+```bash
+git clone https://github.com/<org>/paul.git
+cd paul/finance/contract-management/obligations
+git clone https://github.com/<org>/workspace-obligations.git   # si autorisé
+```
+
+Sous Windows : `git config --global core.longpaths true`.
+
+## Outillage
+
+| Fichier | Rôle |
+|---|---|
+| `ARCHITECTURE.md` | hiérarchie métier, cas d'usage, skills, workspaces — référence |
+| `verify.sh` | tests structurels du monorepo (`bash verify.sh`) |
+| `harness-check/` | sondes de découverte des skills Pi / Hermes, utilisées par `verify.sh` |
+| `tests/` | scénarios fonctionnels de `create-use-case` et `start-use-case` |
+| `publish-github.ps1` | crée et pousse `paul` et les workspaces |
+| `docs/MIGRATION_MONOREPO.md` | retour au monorepo : mapping, suppressions, archive des anciens repos |
+| `docs/spec-refactoring-paul-v1.4.md` | spécification appliquée |
+| `docs/legacy/` | rapports des migrations précédentes |

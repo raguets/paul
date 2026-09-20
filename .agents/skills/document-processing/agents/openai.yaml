@@ -1,0 +1,17 @@
+interface:
+  display_name: document processing
+  short_description: Traite des documents métier locaux en choisissant la stratégie
+    la plus efficace entre extraction texte, OCR sélectif, recherche ciblée, inspection
+    visuelle et traitement structuré. Utilise en priorité @siva-sub/pi-docparser pour
+    les PDF et documents nécessitant OCR/inspection visuelle, pi-office pour certains
+    formats Office si utile, et évite de charger de gros documents entiers dans le
+    contexte.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

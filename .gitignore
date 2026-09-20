@@ -1,7 +1,8 @@
-# Sibling PAUL repositories live inside this directory locally but are
-# separate Git repositories.
-/agent-*/
-/automation-*/
-/workspace-*/
+# Independent business workspace repositories
+**/*workspace*
+
+# Internal transient state for create-use-case
+/.create-use-case/
+
 # verify.sh scratch directory
 /.verify-tmp/

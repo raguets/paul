@@ -2,148 +2,196 @@
 
 **PAUL — Personal Assistant for Universal Labor.**
 
-This document is the source of truth for the business taxonomy, the use cases
-and the repositories. Repository names do not encode the taxonomy; Git only
-materialises what each workspace needs.
+Document de référence de l'organisation du monorepo `paul` : hiérarchie
+métier, cas d'usage, skills, workspaces. Cible définie par
+[`docs/spec-refactoring-paul-v1.4.md`](docs/spec-refactoring-paul-v1.4.md) ;
+la migration depuis la chaîne de repos précédente est décrite dans
+[`docs/MIGRATION_MONOREPO.md`](docs/MIGRATION_MONOREPO.md).
 
-Derived from the `openlabollioules/pi-workspace` monorepo (2026-09-19), spec v1.2
-revised: flat dependency model and short names.
+## 1. Un seul repo pour la logique agentique
 
-## 1. Three separate notions
-
-```text
-Business taxonomy (this document + catalog.yaml)
-common
-└── finance
-    └── contract-management
-        └── obligations            (use case)
-
-Logical dependencies
-contract-management → finance → common
-obligations         → contract-management (hence finance, common)
-
-Git implementation
-only the workspace of a use case has submodules; it mounts, flat,
-its automation and every node of its parent chain
-```
-
-## 2. Repositories
-
-GitHub has no folders inside an organisation: the organisation is the top-level
-container and the prefix (`agent-`, `automation-`, `workspace-`) plays the role
-of the folder. Repositories are also tagged with the topics `paul` and
-`paul-agent` / `paul-automation` / `paul-workspace`.
-
-| Kind | Repository | Contents | Submodules |
-|---|---|---|---|
-| system | `paul` | this document, reports, `verify.sh`, publication script | — |
-| agent | `agent-common` | `document-processing`, `structured-data-duckdb`, `start-use-case` | — |
-| agent | `agent-authoring` | `grill-me` (authoring only) | — |
-| agent | `agent-finance` | Finance domain (no skill yet) | — |
-| agent | `agent-contract-management` | `contract-obligation-extraction` | — |
-| automation | `automation-create-use-case` | `create-use-case` + `scaffold.py` | — |
-| automation | `automation-obligations` | obligations task, specs, `AGENTS.md`, `obligation-register-duckdb` | — |
-| workspace | `workspace-create-use-case` | `USE_CASE.md`, `catalog.yaml`, `.create-use-case/` | `automation`, `authoring` |
-| workspace | `workspace-obligations` | `contract/`, `data/`, `output/`, `.tmp/`, `evaluator/` | `automation`, `contract-management`, `finance`, `common` |
-
-Local layout = GitHub organisation layout (all repositories are siblings):
+`paul` contient **toute** la logique agentique : skills communs, skills
+métier, cas d'usage. Il n'y a plus de chaîne de repos `agent-*` /
+`automation-*`, plus de submodule d'héritage et plus de `_deps`.
 
 ```text
-G:\DEV\paul\                     # repo "paul" (ignores the sibling repos below)
+paul/
+├── .git/
+├── .gitignore                            # **/*workspace*  +  /.create-use-case/
+├── README.md                             # le seul README par défaut
 ├── ARCHITECTURE.md
-├── agent-common\  agent-authoring\  agent-finance\  agent-contract-management\
-├── automation-create-use-case\  automation-obligations\
-└── workspace-create-use-case\   workspace-obligations\
+├── verify.sh                             # tests structurels
+├── harness-check/                        # sondes Pi / Hermes
+├── docs/                                 # spec, rapport de migration, archives
+├── tests/                                # scénarios fonctionnels
+├── .create-use-case/                     # temporaire, gitignored
+│
+├── .agents/
+│   └── skills/                           # skills communs
+│       ├── create-use-case/
+│       ├── grill-me/
+│       ├── start-use-case/
+│       ├── structured-data-duckdb/
+│       └── document-processing/
+│
+├── finance/
+│   └── contract-management/
+│       ├── .agents/skills/
+│       │   └── contract-obligation-extraction/
+│       └── obligations/                  # cas d'usage
+│           ├── TASK.md
+│           ├── AGENTS.md
+│           ├── AUTOMATION_SPEC.md
+│           ├── PROCESS_AUTOMATION.md
+│           ├── .agents/skills/obligation-register-duckdb/
+│           ├── .pi/settings.json
+│           └── workspace-obligations/    # repo Git indépendant
+│
+└── rh/
+    └── recrutement/
+        └── candidature/                  # cas d'usage
+            ├── TASK.md
+            ├── USE_CASE.md
+            ├── AUTOMATION_SPEC.md
+            ├── .agents/skills/analyse-candidature/
+            ├── .pi/settings.json
+            └── workspace-candidature/    # repo Git indépendant
 ```
 
-## 3. Business taxonomy
+## 2. Hiérarchie métier = dossiers
 
-| Node | Type | Parent | Repository |
-|---|---|---|---|
-| `common` | common | — | `agent-common` |
-| `finance` | domain | `common` | `agent-finance` |
-| `contract-management` | sub-domain | `finance` | `agent-contract-management` |
-
-Sub-domains are optional specialisations. A use case attached to `finance`
-inherits `finance` and `common`, **not** `contract-management`. The machine-readable
-copy used by `create-use-case` is `workspace-create-use-case/catalog.yaml`.
-
-## 4. Use cases
-
-| Use case | Type | Parent | Automation | Workspace |
-|---|---|---|---|---|
-| `obligations` | AUTOMATION | `contract-management` | `automation-obligations` | `workspace-obligations` |
-| `create-use-case` | AUTOMATION (tooling) | — (uses `authoring`) | `automation-create-use-case` | `workspace-create-use-case` |
-
-Moving a use case to another branch changes this table, the catalog parent and
-the workspace submodules — not repository names.
-
-## 5. Flat dependency model
-
-The workspace is the **composition root**. It mounts under
-`.agents/skills/_deps/<id>/`:
+Les domaines et sous-domaines sont de simples dossiers. Ils sont
+**facultatifs** : un cas d'usage peut vivre à n'importe quelle profondeur.
 
 ```text
-workspace-obligations/.agents/skills/_deps/
-├── automation/            -> automation-obligations
-├── contract-management/   -> agent-contract-management
-├── finance/               -> agent-finance
-└── common/                -> agent-common
+paul/finance/contract-management/obligations/
+paul/rh/recrutement/candidature/
+paul/finance/monthly-close/
+paul/customer-service/ticket-triage/
 ```
 
-Rules:
+Un dossier métier sans skill est simplement un dossier : pas de README, pas de
+`.agents/skills/` vide pour « tenir » le niveau.
 
-- `agent-*` and `automation-*` repositories never have submodules;
-- the workspace mounts its automation and the whole parent chain (parent,
-  then ancestors from the catalog);
-- one copy and one pinned version of each repository per workspace;
-- constant depth: skills are always at `_deps/<id>/.agents/skills/<skill>/`.
+## 3. Cas d'usage
 
-Why not nested submodules (each repo containing its parent)? Pi 0.84 does not
-discover skills below hidden directories (`_deps/x/.agents/…/_deps/y/.agents`),
-nested `.git/modules` paths exceed Windows `MAX_PATH`, and a repository
-referencing its whole chain would be cloned several times (duplicate skills for
-Hermes, divergent versions).
+Un cas d'usage porte son **nom fonctionnel** (`obligations`, jamais
+`automation-obligations`). Il n'existe plus deux architectures distinctes
+« tâche simple » et « automatisation » : un seul modèle, dont on ne crée que ce
+qui sert.
 
-## 6. Submodule URLs
-
-Relative URLs, no host and no organisation:
-
-```ini
-[submodule ".agents/skills/_deps/common"]
-    path = .agents/skills/_deps/common
-    url = ../agent-common
-```
-
-Resolved against the workspace remote (`git@github.com:<org>/workspace-x.git`
-→ `git@github.com:<org>/agent-common`, same for HTTPS), or against the sibling
-directory while the repository has no remote. Renaming the organisation or
-moving to GitLab (one flat group) requires no change.
-
-## 7. Harness
-
-| Harness | Skill discovery from a workspace root |
+| Élément | Quand |
 |---|---|
-| Hermes 0.21 | native: `<root>/.agents/skills/**` walked recursively, after `hermes skills trust` |
-| Pi 0.84 | `.agents/skills` auto-discovered but hidden directories are skipped; `.pi/settings.json` lists the 4 `_deps/<id>/.agents/skills` directories (+ `!**/README.md`). Generated by `scaffold.py pi-adapter`, no copy of any skill |
+| `TASK.md` | toujours — point d'entrée canonique |
+| spécifications (`AUTOMATION_SPEC.md`, `USE_CASE.md`, `PROCESS_AUTOMATION.md`, `AGENTS.md`) | si utiles |
+| `.agents/skills/` | seulement si un skill spécifique est nécessaire |
+| `scripts/` | seulement si des scripts propres sont nécessaires |
+| `.pi/settings.json` | généré (§6) |
+| `workspace-<slug>/` | seulement si des données persistent |
 
-## 8. Access rights (GitHub)
+Cas d'usage actuels :
 
-| Repositories | Content | Access |
+| Cas d'usage | Emplacement | Skill local | Workspace |
+|---|---|---|---|
+| `obligations` | `finance/contract-management/` | `obligation-register-duckdb` | `workspace-obligations` |
+| `candidature` | `rh/recrutement/` | `analyse-candidature` | `workspace-candidature` |
+
+## 4. Skills — héritage structurel
+
+La source canonique reste `.agents/skills/<skill>/SKILL.md`. Un cas d'usage
+voit les `.agents/skills` de toute sa chaîne de dossiers :
+
+```text
+paul/.agents/skills
+        ↓
+finance/.agents/skills
+        ↓
+finance/contract-management/.agents/skills
+        ↓
+finance/contract-management/obligations/.agents/skills
+```
+
+Aucun `_deps`, aucun submodule, aucune copie de `SKILL.md`, y compris pour
+satisfaire un harness.
+
+Un skill est placé au niveau où il est réutilisable. Un nouveau skill commence
+`LOCAL` dans le cas d'usage ; sa promotion vers un niveau supérieur est
+manuelle et se réduit à un `git mv`.
+
+## 5. Workspaces métier
+
+Les données, documents et résultats persistants d'un cas d'usage vivent dans un
+repo Git **indépendant** imbriqué sous le cas d'usage :
+
+```text
+paul/finance/contract-management/obligations/workspace-obligations/.git/
+```
+
+- nom obligatoire `workspace-<slug>` ; le repo **est** le workspace (jamais de
+  sous-dossier `workspace/`) ;
+- son `.git` et son remote lui appartiennent, distincts de ceux de `paul` ;
+- `paul/.gitignore` contient `**/*workspace*` : le monorepo n'indexe jamais
+  leur contenu, sans `.gitkeep` ni autre artifice ;
+- les commits du workspace ne modifient pas l'index de `paul`, et inversement ;
+- contenu au besoin seulement : `input/`, `contract/`, `data/`, `documents/`,
+  `output/`, `state/`, `.tmp/`, `test-data/`, `evaluator/`.
+
+Les droits peuvent être plus restrictifs que ceux de `paul` : un workspace
+contient des documents métier, des données et parfois un ground truth, alors
+que `paul` ne contient que de la logique agentique.
+
+## 6. Lancement et harnesses
+
+Le harness se lance depuis le **dossier du cas d'usage** :
+
+```bash
+cd paul/finance/contract-management/obligations
+pi        # ou hermes, opencode…
+```
+
+Le `.git` du workspace est *en dessous* de ce répertoire : il ne perturbe pas
+la recherche ascendante de la racine de projet.
+
+| Harness | Découverte des skills | État |
 |---|---|---|
-| `agent-*`, `paul` | skills, no business document | broad (team `paul-maintainers`) |
-| `automation-*` | automation logic | people maintaining or reviewing the logic |
-| `workspace-*` | contracts, data, outputs, ground truth | **private**, need-to-know team per workspace; do not grant through a broad base permission of the organisation |
+| Pi | `<cwd>/.agents/skills` automatiquement ; les niveaux métier supérieurs sont listés dans `<use-case>/.pi/settings.json`, généré par `scaffold.py pi-adapter` (aucune copie) | ✅ toute la chaîne est vue, une seule fois (vérifié par `verify.sh`) |
+| Hermes | `<racine Git>/.agents/skills/**`, soit la racine `paul` : seuls les skills **communs** sont vus | ⚠️ les niveaux métier intermédiaires et les skills locaux ne sont pas vus |
 
-Cloning a workspace requires read access to the repositories it mounts; the
-reverse is not needed.
+La limite Hermes est une limite du harness, pas de l'architecture. Elle est
+traitée séparément : ne jamais dupliquer un `SKILL.md` ni modifier la
+hiérarchie métier pour la contourner. Une configuration harness-specific doit
+rester minimale et ne contenir aucune logique métier.
 
-## 9. Publication order
+## 7. `create-use-case`
 
-Dependencies first: `agent-*`, then `automation-*`, then `workspace-*`, then
-`paul`. See `publish-github.ps1`.
+`create-use-case` est un **skill commun**
+(`paul/.agents/skills/create-use-case/`) : ni repo Git séparé, ni workspace
+propre, ni domaine `authoring/`. Il est disponible partout dans `paul`.
 
-## 10. Windows
+Convention d'usage : lancer le harness depuis le dossier parent voulu.
 
-`git config --global core.longpaths true` is still recommended; with the flat
-model the longest path inside a workspace clone is below 120 characters.
+```bash
+cd paul/finance/contract-management
+# « crée un use case obligations »   ->   ./obligations/
+```
+
+Son état de travail est temporaire et vit uniquement dans
+`paul/.create-use-case/<slug>/` (gitignored). Il n'est jamais copié dans le cas
+d'usage généré et il est supprimé après une génération réussie.
+
+`process-automation-bootstrap` n'est pas réintroduit.
+
+## 8. Publication Git
+
+| Repo | Contenu | Visibilité typique |
+|---|---|---|
+| `paul` | toute la logique agentique, aucun document métier | large |
+| `workspace-<slug>` | contrats, CV, données, sorties, ground truth | **privé**, équipe dédiée |
+
+Voir `publish-github.ps1`.
+
+## 9. Windows
+
+`git config --global core.longpaths true` reste recommandé. Avec le modèle
+monorepo, les chemins restent courts : il n'y a plus de `.git/modules`
+imbriqués.
