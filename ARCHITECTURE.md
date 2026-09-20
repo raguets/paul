@@ -3,10 +3,7 @@
 **PAUL — Personal Assistant for Universal Labor.**
 
 Document de référence de l'organisation du monorepo `paul` : hiérarchie
-métier, cas d'usage, skills, workspaces. Cible définie par
-[`docs/spec-refactoring-paul-v1.4.md`](docs/spec-refactoring-paul-v1.4.md) ;
-la migration depuis la chaîne de repos précédente est décrite dans
-[`docs/MIGRATION_MONOREPO.md`](docs/MIGRATION_MONOREPO.md).
+métier, cas d'usage, skills, workspaces.
 
 ## 1. Un seul repo pour la logique agentique
 
@@ -22,7 +19,6 @@ paul/
 ├── ARCHITECTURE.md
 ├── verify.sh                             # tests structurels
 ├── harness-check/                        # sondes Pi / Hermes
-├── docs/                                 # spec, rapport de migration, archives
 ├── tests/                                # scénarios fonctionnels
 ├── .create-use-case/                     # temporaire, gitignored
 ├── .hermes/skills/                       # adaptateur Hermes généré, gitignored
